@@ -1,0 +1,10 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+#transpiled code
+dist
+
+# misc
+.DS_Store
+npm-debug.log*
