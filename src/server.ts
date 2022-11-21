@@ -10,6 +10,7 @@ import {
   registerUserHandler,
 } from './handlers/user';
 import { credentials } from './modules/middleware';
+import { logoutUserHandler } from './handlers/user';
 
 export const allowedOrigins = [
   'https://www.yoursite.com',
@@ -50,6 +51,7 @@ app.use('/api', isAuth, router);
 
 app.post('/register', registerUserHandler);
 app.post('/login', loginUserHandler);
+router.get('/logout', logoutUserHandler);
 
 app.use((err, req, res, next) => {
   if (err.type === 'auth') {
