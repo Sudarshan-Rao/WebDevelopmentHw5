@@ -8,4 +8,12 @@ export const handleInputError = (req, res, next) => {
   next();
 };
 
+import { allowedOrigins } from '../server';
 
+export const credentials = (req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Credentials', true);
+  }
+  next();
+};

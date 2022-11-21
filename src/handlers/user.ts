@@ -1,4 +1,8 @@
-import { generateAccessToken, generateRefreshToken, hashPassword } from '../modules/auth';
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  hashPassword,
+} from '../modules/auth';
 import { validatePassword } from '../modules/auth';
 import { User } from '../dbconnection';
 import jwt from 'jsonwebtoken';
@@ -21,26 +25,32 @@ export const registerUserHandler = async (req, res, next) => {
 
     const hashedPassword = await hashPassword(password);
 
-    const user = new User({
+    const user = await User.create({
       email,
       name,
       password: hashedPassword,
     });
-    
-    const accessToken = await generateAccessToken(user);
-    const refreshToken = await generateRefreshToken(user);
 
-    user.refreshToken = refreshToken;
-    await user.save();
+    console.log(user);
 
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.status(201).json({ success: `New user ${name} created!` });
 
-    res.status(200);
-    res.json({ accessToken });
+    // const accessToken = await generateAccessToken(user);
+    // const refreshToken = await generateRefreshToken(user);
 
+    // user.refreshToken = refreshToken;
+    // await user.save();
+
+    // res.cookie('refreshToken', refreshToken, {
+    //   httpOnly: true,
+    //   secure: true,
+    //   sameSite: 'none',
+    //   domain: 'localhost',
+    //   maxAge: 7 * 24 * 60 * 60 * 1000,
+    // });
+
+    // res.status(200);
+    // res.json({ accessToken });
   } catch (error) {
     error.type = 'auth';
     next(error);
@@ -78,12 +88,13 @@ export const loginUserHandler = async (req, res, next) => {
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
+      secure: true,
+      sameSite: 'none',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.status(200);
     res.json({ accessToken });
-
   } catch (error) {
     error.type = 'auth';
     next(error);
@@ -96,38 +107,31 @@ export const logoutUserHandler = async (req, res, next) => {
   try {
     // get cookie from request
     const { refreshToken } = req.cookies;
-    if (!refreshToken) {
-      console.log('No refresh token');
-      res.status(400);
-      res.json({ message: 'Refresh token is required' });
-      return;
-    }
+    if (!refreshToken) return res.sendStatus(204);
 
-    const decoded = jwt.verify(
+    const user = await User.findOne({
       refreshToken,
-      process.env.JWT_REFRESH_TOKEN_SECRET
-    );
-
-    const { id } = decoded as any;
-
-    const user = 
-      await
-      User
-        .findById(id)
-        .exec();
+    }).exec();
 
     if (!user) {
-      res.status(401);
-      res.json({ message: 'Invalid refresh token' });
-      return;
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+      });
+      return res.sendStatus(204);
     }
 
     user.refreshToken = null;
     await user.save();
 
-    res.clearCookie('refreshToken');
-    res.status(200);
-    res.json({ message: 'User logged out' });
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+    });
+
+    res.sendStatus(204);
   } catch (error) {
     error.type = 'auth';
     next(error);
