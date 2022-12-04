@@ -13,9 +13,9 @@ export const hashPassword = async (password: string) => {
   return await bcrypt.hash(password, 10);
 };
 
-export const generateAccessToken = async (user: any) => {
+export const generateAccessToken = (user: any) => {
   return jwt.sign(
-    { id: user._id, email: user.email },
+    { id: user._id, email: user.email, name: user.name },
     process.env.JWT_ACCESS_TOKEN_SECRET,
     {
       expiresIn: '1d',
@@ -23,9 +23,9 @@ export const generateAccessToken = async (user: any) => {
   );
 };
 
-export const generateRefreshToken = async (user: any) => {
+export const generateRefreshToken = (user: any) => {
   return jwt.sign(
-    { id: user._id, email: user.email },
+    { id: user._id, email: user.email, name: user.name },
     process.env.JWT_REFRESH_TOKEN_SECRET,
     {
       expiresIn: '7d',
@@ -37,30 +37,34 @@ export const refreshTokenHandler = async (req, res, next) => {
   try {
     const { refreshToken } = req.cookies;
     if (!refreshToken) {
-      res.status(400);
-      res.json({ message: 'Refresh token is required' });
-      return
-    }
-
-    const decoded = jwt.verify(
-      refreshToken,
-      process.env.JWT_REFRESH_TOKEN_SECRET
-    );
-
-    const { id } = decoded as any;
-
-    const user = await User.findById(id);
-
-    if (!user) {
       res.status(401);
-      res.json({ message: 'Invalid refresh token' });
-        return
+      res.json({ message: 'Refresh token is required' });
+      return;
     }
 
-    const accessToken = await generateAccessToken(user);
+    const user = await User.findOne({ refreshToken }).exec();
+    console.log(user);
+    if (!user) return res.sendStatus(403);
 
-    res.status(200);
-    res.json({ accessToken });
+    jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_TOKEN_SECRET,
+      (err, decoded) => {
+        if (err || user.email !== decoded.email) {
+          res.status(403);
+          res.json({ message: 'Invalid refresh token' });
+          return;
+        }
+
+        console.log(
+          `Refresh token verified for user ${user.email} ${user}`
+        );
+
+        const accessToken = generateAccessToken(user);
+        console.log(`Access token after refresh: ${accessToken}`);
+        res.status(200).json({ accessToken });
+      }
+    );
   } catch (error) {
     error.type = 'auth';
     next(error);
@@ -69,21 +73,22 @@ export const refreshTokenHandler = async (req, res, next) => {
 
 export const isAuth = (req: any, res: any, next: any) => {
   const authorization = req.headers.authorization;
-  console.log(authorization);
+  // console.log(authorization);
   if (!authorization) {
     res.status(401);
     res.json({ message: 'No Token' });
-    return
+    return;
   }
 
   const token = authorization.slice(7, authorization.length); // Bearer XXXXXX
 
+  console.log(`isAuthToken: ${token}`);
   try {
     const decoded = jwt.verify(
       token,
-        process.env.JWT_ACCESS_TOKEN_SECRET || 'somethingsecret'
+      process.env.JWT_ACCESS_TOKEN_SECRET || 'somethingsecret'
     );
-    console.log('decoded user', decoded);
+    // console.log('decoded user', decoded);
 
     req.user = decoded;
     next();

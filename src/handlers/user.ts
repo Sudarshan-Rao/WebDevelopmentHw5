@@ -5,7 +5,6 @@ import {
 } from '../modules/auth';
 import { validatePassword } from '../modules/auth';
 import { User } from '../dbconnection';
-import jwt from 'jsonwebtoken';
 
 export const registerUserHandler = async (req, res, next) => {
   try {
@@ -16,7 +15,11 @@ export const registerUserHandler = async (req, res, next) => {
       return;
     }
 
-    const duplicateUser = await User.findOne({ email }).exec();
+    const emailLowerCase = email.toLowerCase();
+
+    const duplicateUser = await User.findOne({
+      email: emailLowerCase,
+    }).exec();
     if (duplicateUser) {
       res.status(400);
       res.json({ message: 'User already exists' });
@@ -26,31 +29,14 @@ export const registerUserHandler = async (req, res, next) => {
     const hashedPassword = await hashPassword(password);
 
     const user = await User.create({
-      email,
+      email: emailLowerCase,
       name,
       password: hashedPassword,
     });
 
-    console.log(user);
+    // console.log(user);
 
     res.status(201).json({ success: `New user ${name} created!` });
-
-    // const accessToken = await generateAccessToken(user);
-    // const refreshToken = await generateRefreshToken(user);
-
-    // user.refreshToken = refreshToken;
-    // await user.save();
-
-    // res.cookie('refreshToken', refreshToken, {
-    //   httpOnly: true,
-    //   secure: true,
-    //   sameSite: 'none',
-    //   domain: 'localhost',
-    //   maxAge: 7 * 24 * 60 * 60 * 1000,
-    // });
-
-    // res.status(200);
-    // res.json({ accessToken });
   } catch (error) {
     error.type = 'auth';
     next(error);
@@ -63,15 +49,17 @@ export const loginUserHandler = async (req, res, next) => {
     if (!email || !password) {
       res.status(400);
       res.json({ message: 'Email and password are required' });
+      return;
     }
 
-    const user = await User.findOne({
-      email,
-    });
+    const emailLowerCase = email.toLowerCase();
+
+    const user = await User.findOne({ email: emailLowerCase }).exec();
 
     if (!user) {
       res.status(401);
       res.json({ message: 'Invalid email' });
+      return;
     }
 
     const isValidPassword = await validatePassword(
@@ -81,20 +69,24 @@ export const loginUserHandler = async (req, res, next) => {
     if (!isValidPassword) {
       res.status(401);
       res.json({ message: 'Invalid password' });
+      return;
     }
 
     const accessToken = await generateAccessToken(user);
     const refreshToken = await generateRefreshToken(user);
 
+    user.refreshToken = refreshToken;
+    const result = await user.save();
+
+    console.log(result);
+
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: true, //process.env.NODE_ENV === 'production',
+      sameSite: 'None',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-
-    res.status(200);
-    res.json({ accessToken });
+    res.status(200).json({ accessToken });
   } catch (error) {
     error.type = 'auth';
     next(error);
@@ -106,6 +98,7 @@ export const logoutUserHandler = async (req, res, next) => {
   //delete refresh token from database
   try {
     // get cookie from request
+    // console.log(req);
     const { refreshToken } = req.cookies;
     if (!refreshToken) return res.sendStatus(204);
 
@@ -113,26 +106,21 @@ export const logoutUserHandler = async (req, res, next) => {
       refreshToken,
     }).exec();
 
-    if (!user) {
-      res.clearCookie('refreshToken', {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-      });
-      return res.sendStatus(204);
+    if (user) {
+      user.refreshToken = null;
+      await user.save();
     }
-
-    user.refreshToken = null;
-    await user.save();
 
     res.clearCookie('refreshToken', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: true, //process.env.NODE_ENV === 'production',
+      sameSite: 'None',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.sendStatus(204);
   } catch (error) {
+    console.log(error);
     error.type = 'auth';
     next(error);
   }
